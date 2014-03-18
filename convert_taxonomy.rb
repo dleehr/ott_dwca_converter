@@ -1,14 +1,24 @@
+#!/usr/bin/env ruby
+
 require 'dwc-archive'
 require 'csv'
+require 'json'
+require 'optparse'
 
-NCBI_ASTER = '/Users/dan/Code/reference-taxonomy/t/tax/ncbi_aster/'
-OUTPUT_FILE = '/Users/dan/Code/ncbi_aster.tar.gz'
 SEPARATOR = "\t|\t"
 
+options = {}
+
+optparse = OptionParser.new do |opts|
+  opts.banner = "Usage: convert_taxonomy.rb [options]"
+  opts.on('-s', '--source_dir DIR', 'Opentree taxonomy directory') {|v| options[:source_dir] = v}
+  opts.on('-d', '--dest FILE.tar.gz', 'Darwin Core Output File') {|v| options[:dest] = v}
+end
+
 def convert(source_dir, dest)
-  taxonomy_file = source_dir + 'taxonomy.tsv'
-  synonyms_file = source_dir + 'synonyms.tsv'
-  metadata_file = source_dir + 'about.json'
+  taxonomy_file = File.join(source_dir, 'taxonomy.tsv')
+  synonyms_file = File.join(source_dir, 'synonyms.tsv')
+  metadata_file = File.join(source_dir, 'about.json')
 
   print "Building DWC Archive from #{source_dir} as #{dest}"
   dwc_gen = DarwinCore::Generator.new(dest)
@@ -44,10 +54,28 @@ def convert(source_dir, dest)
     hash_row = Hash(row)
     synonyms << hash_row.values_at('uid','name','type','uniqname')
   end
+
   dwc_gen.add_extension(synonyms,'synonyms.txt')
   # TODO: Add metadata from JSON
+  File.open(metadata_file) do |json_file|
+    metadata = JSON.load(json_file)
+    puts metadata
+  end
   dwc_gen.add_meta_xml
   dwc_gen.pack
 end
 
-convert(NCBI_ASTER,OUTPUT_FILE)
+begin
+  optparse.parse!
+  mandatory = [:source_dir, :dest]
+  missing = mandatory.select{ |param| options[param].nil? }
+  if not missing.empty?
+    puts optparse
+    exit
+  end
+  convert(options[:source_dir], options[:dest])
+rescue OptionParser::InvalidOption, OptionParser::MissingArgument
+  puts $!.to_s
+  puts optparse
+  exit
+end
